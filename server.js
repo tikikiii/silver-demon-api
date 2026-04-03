@@ -3,6 +3,7 @@ const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 const ADMIN_PASSWORD = "AdminSilverKey";
 
 let database = {};
@@ -16,7 +17,9 @@ function saveDB() {
     fs.writeFileSync("keys.json", JSON.stringify(database, null, 2));
 }
 
+// ===============================
 // VERIFY
+// ===============================
 app.get("/verify", (req, res) => {
     const { key, hwid } = req.query;
     const data = database[key];
@@ -33,19 +36,21 @@ app.get("/verify", (req, res) => {
         return res.json({ valid: false, reason: "expired" });
     }
 
-    if (!data.hwid) {
+    // HWID AUTO RESET
+    if (!data.hwid || data.hwid !== hwid) {
         data.hwid = hwid;
     }
 
-    if (data.hwid !== hwid) {
-        return res.json({ valid: false, reason: "hwid_mismatch" });
-    }
+    // TRACK USER
+    data.lastUsed = Date.now();
 
     saveDB();
     res.json({ valid: true });
 });
 
+// ===============================
 // GENERATE
+// ===============================
 app.get("/generate", (req, res) => {
     const { admin, days } = req.query;
 
@@ -59,14 +64,18 @@ app.get("/generate", (req, res) => {
     database[key] = {
         hwid: null,
         expires: expireTime,
-        banned: false
+        banned: false,
+        createdAt: Date.now(),
+        lastUsed: null
     };
 
     saveDB();
     res.json({ key });
 });
 
+// ===============================
 // DELETE
+// ===============================
 app.get("/delete", (req, res) => {
     const { admin, key } = req.query;
 
@@ -80,7 +89,29 @@ app.get("/delete", (req, res) => {
     res.json({ success: true });
 });
 
+// ===============================
+// BAN
+// ===============================
+app.get("/ban", (req, res) => {
+    const { admin, key } = req.query;
+
+    if (admin !== ADMIN_PASSWORD) {
+        return res.json({ error: "Unauthorized" });
+    }
+
+    if (!database[key]) {
+        return res.json({ error: "Key not found" });
+    }
+
+    database[key].banned = true;
+    saveDB();
+
+    res.json({ success: true });
+});
+
+// ===============================
 // DASHBOARD
+// ===============================
 app.get("/dashboard", (req, res) => {
     const { admin } = req.query;
 
@@ -109,19 +140,30 @@ app.get("/dashboard", (req, res) => {
         await fetch("/delete?admin=${ADMIN_PASSWORD}&key="+k);
         location.reload();
     }
+
+    async function ban(k){
+        await fetch("/ban?admin=${ADMIN_PASSWORD}&key="+k);
+        location.reload();
+    }
     </script>
     `;
 
     for (let key in database) {
         let k = database[key];
+
         let exp = new Date(k.expires).toLocaleString();
+        let last = k.lastUsed ? new Date(k.lastUsed).toLocaleString() : "Never";
 
         html += `
         <div style="background:#222;padding:10px;margin:10px;border-radius:8px">
-        ${key}<br>
+        <b>${key}</b><br>
         HWID: ${k.hwid || "none"}<br>
+        Last Used: ${last}<br>
         Exp: ${exp}<br>
+        Status: ${k.banned ? "🔴 BANNED" : "🟢 ACTIVE"}<br><br>
+
         <button onclick="del('${key}')">Delete</button>
+        <button onclick="ban('${key}')">Ban</button>
         </div>
         `;
     }
