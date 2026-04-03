@@ -3,7 +3,7 @@ const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = "CHANGE_THIS_PASSWORD";
+const ADMIN_PASSWORD = "AdminSilverKey";
 
 let database = {};
 try {
